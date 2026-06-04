@@ -81,7 +81,7 @@ body{font-family:'Manrope',sans-serif;background:var(--bg);color:var(--text);min
 /* ── LAYOUT ── */
 .layout{display:flex;flex:1;overflow:hidden;height:calc(100vh - var(--nav-h));padding-bottom:56px}
 @media(min-width:768px){.layout{padding-bottom:0}}
-.main{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch}
+.main{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;scroll-padding-bottom:280px}
 @media(min-width:600px){.main{padding:24px}}
 @media(min-width:768px){.main{padding:28px 32px}}
 
@@ -637,6 +637,52 @@ function toggleTimer(){
   } else clearInterval(timerInt);
 }
 window.toggleTimer=toggleTimer;
+
+// ── MOBILE KEYBOARD FIX ──────────────────────────────────
+(function(){
+  // When textarea/input gets focus, scroll it into view above keyboard
+  document.addEventListener('focusin', function(e){
+    const el = e.target;
+    if(el.tagName !== 'TEXTAREA' && el.tagName !== 'INPUT') return;
+    // Wait for keyboard to appear (~300ms on iOS, ~200ms on Android)
+    setTimeout(function(){
+      el.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 350);
+    // Extra nudge for stubborn cases
+    setTimeout(function(){
+      const rect = el.getBoundingClientRect();
+      const viewH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      if(rect.bottom > viewH - 20){
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+      }
+    }, 600);
+  });
+
+  // Use visualViewport API (modern browsers) to handle keyboard resize
+  if(window.visualViewport){
+    const main = document.getElementById('main-area');
+    window.visualViewport.addEventListener('resize', function(){
+      const kbHeight = window.innerHeight - window.visualViewport.height;
+      if(main){
+        main.style.paddingBottom = kbHeight > 100 ? (kbHeight + 16) + 'px' : '';
+      }
+      // Re-scroll active element into view
+      const active = document.activeElement;
+      if(active && (active.tagName==='TEXTAREA'||active.tagName==='INPUT')){
+        setTimeout(()=>active.scrollIntoView({behavior:'smooth',block:'center'}), 100);
+      }
+    });
+  }
+
+  // Prevent page zoom on double tap (iOS)
+  let lastTouch = 0;
+  document.addEventListener('touchend', function(e){
+    const now = Date.now();
+    if(now - lastTouch < 300) e.preventDefault();
+    lastTouch = now;
+  }, {passive:false});
+})();
+
 </script>
 </body>
 </html>
