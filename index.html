@@ -356,8 +356,10 @@ function subscribeAll(){
     syncOk();
     renderSidebar();
     renderBottomNav();
-    if(isOrg&&!currentGid) renderOrgView();
-    else if(currentGid) renderGroupView(currentGid);
+    // Only re-render org view automatically (safe, no inputs focused there)
+    if(isOrg&&!currentGid){ renderOrgView(); return; }
+    // For group view: update quietly without destroying focused inputs
+    if(currentGid) quietUpdateGroup(currentGid);
   }, ()=>syncErr());
 }
 
@@ -564,7 +566,7 @@ function renderGroupView(gid){
     </div>
     <div class="mbar">
       <span class="mbar-lbl">Участники:</span>
-      ${members.map(m=>`<span class="mbar-chip">${m}</span>`).join('')}
+      <span id="members-bar-chips">${members.map(m=>`<span class="mbar-chip">${m}</span>`).join('')}</span>
       <button class="add-link" onclick="openGroupModal('${gid}')">+ Добавить</button>
     </div>
     <div class="task-tabs" id="ttabs"></div>
@@ -590,19 +592,22 @@ function renderContent(gid){
   if(ci)ci.innerHTML=t.items.map((item,ii)=>{
     const on=getCheck(gid,currentTask,ii);
     return `<div class="chk-item">
-      <div class="chkbox ${on?'on':''}" onclick="toggleChk('${gid}',${currentTask},${ii},this)"></div>
+      <div class="chkbox ${on?'on':''}" id="chk-${currentTask}-${ii}" onclick="toggleChk('${gid}',${currentTask},${ii},this)"></div>
       <div class="chk-txt ${on?'struck':''}" id="ct-${currentTask}-${ii}">${item}</div>
     </div>`;
   }).join('');
   const fc=document.getElementById('fc-grid');
-  if(fc)fc.innerHTML=t.fields.map(f=>`
-    <div class="fc-block ${f.wide?'wide':''}">
-      <div class="fc-hd" style="border-left:3px solid ${g.color}">
-        <div class="fc-title">${f.title}</div>
-        <div class="fc-hint">${f.hint}</div>
-      </div>
-      <textarea class="fc-ta" placeholder="${f.hint}" data-key="${f.key}" data-gid="${gid}" oninput="onInput(this)">${getField(gid,f.key)}</textarea>
-    </div>`).join('');
+  if(fc){
+    // Render each field block — but preserve value+focus if user is actively in it
+    fc.innerHTML = t.fields.map(f=>`
+      <div class="fc-block ${f.wide?'wide':''}">
+        <div class="fc-hd" style="border-left:3px solid ${g.color}">
+          <div class="fc-title">${f.title}</div>
+          <div class="fc-hint">${f.hint}</div>
+        </div>
+        <textarea class="fc-ta" id="ta-${gid}-${f.key}" placeholder="${f.hint}" data-key="${f.key}" data-gid="${gid}" oninput="onInput(this)">${getField(gid,f.key)}</textarea>
+      </div>`).join('');
+  }
 }
 
 function toggleChk(gid,ti,ii,el){
@@ -636,6 +641,45 @@ function toggleTimer(){
     },1000);
   } else clearInterval(timerInt);
 }
+
+// ── QUIET UPDATE (no re-render while typing) ──────────────
+function quietUpdateGroup(gid){
+  const focused = document.activeElement;
+  const isTyping = focused && (focused.tagName==='TEXTAREA'||focused.tagName==='INPUT');
+
+  // Always update sidebar progress
+  renderSidebar();
+  renderBottomNav();
+
+  if(isTyping){
+    // User is typing — only update checkboxes and member bar, not textareas
+    updateCheckboxesOnly(gid);
+    updateMembersBar(gid);
+    return;
+  }
+  // Nobody typing — safe to re-render fully
+  renderGroupView(gid);
+}
+
+function updateCheckboxesOnly(gid){
+  TASKS.forEach((t,ti)=>{
+    t.items.forEach((_,ii)=>{
+      const box = document.getElementById('chk-'+ti+'-'+ii);
+      const txt = document.getElementById('ct-'+ti+'-'+ii);
+      if(!box) return;
+      const on = getCheck(gid,ti,ii);
+      box.classList.toggle('on', on);
+      if(txt) txt.classList.toggle('struck', on);
+    });
+  });
+}
+
+function updateMembersBar(gid){
+  const members = getMembers(gid);
+  const bar = document.getElementById('members-bar-chips');
+  if(bar) bar.innerHTML = members.map(m=>`<span class="mbar-chip">${m}</span>`).join('');
+}
+
 window.toggleTimer=toggleTimer;
 
 // ── MOBILE KEYBOARD FIX ──────────────────────────────────
